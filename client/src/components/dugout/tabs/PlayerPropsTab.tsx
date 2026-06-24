@@ -11,6 +11,7 @@
 
 import { useState, useCallback } from 'react';
 import PlayerDetailPanel, { type PlayerInfo, type PropLine } from '@/components/dugout/PlayerDetailPanel';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Market = 'h2h' | 'hr' | 'hits' | 'total_bases' | 'ks' | 'yrfi' | 'first_five';
@@ -343,17 +344,32 @@ export default function PlayerPropsTab({ defaultMarket = 'hits' }: PlayerPropsTa
   const [activeMarket, setActiveMarket] = useState<Market>(defaultMarket);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [detailPlayer, setDetailPlayer] = useState<{ player: PlayerRow; market: Market } | null>(null);
+  const { addLeg, removeLeg, legs, hasLeg } = useBetSlip();
 
   const games = mockGames(activeMarket);
 
-  const togglePick = useCallback((key: string) => {
+  const togglePick = useCallback((key: string, player: PlayerRow, btn: OddsButton, game: GameGroup) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+        // Remove from global slip
+        const leg = legs.find(l => l.player === player.name && l.selection === btn.label);
+        if (leg) removeLeg(leg.id);
+      } else {
+        next.add(key);
+        // Add to global slip
+        addLeg({
+          player: player.name,
+          market: activeMarket,
+          selection: btn.label,
+          odds: btn.odds,
+          game: `${game.awayTeam} @ ${game.homeTeam}`,
+        });
+      }
       return next;
     });
-  }, []);
+  }, [legs, addLeg, removeLeg, activeMarket]);
 
   const handlePlayerTap = useCallback((player: PlayerRow, market: Market) => {
     // Only open detail panel for real players (not YRFI / F5 rows)
@@ -368,7 +384,14 @@ export default function PlayerPropsTab({ defaultMarket = 'hits' }: PlayerPropsTa
       next.add(key);
       return next;
     });
-  }, []);
+    addLeg({
+      player: bet.player,
+      market: bet.market,
+      selection: bet.selection,
+      odds: bet.odds,
+      game: detailPlayer ? `${detailPlayer.player.teamAbbrev}` : '',
+    });
+  }, [addLeg, detailPlayer]);
 
   return (
     <div
@@ -484,7 +507,7 @@ export default function PlayerPropsTab({ defaultMarket = 'hits' }: PlayerPropsTa
                           key={key}
                           btn={btn}
                           selected={selected.has(key)}
-                          onToggle={() => togglePick(key)}
+                          onToggle={() => togglePick(key, player, btn, game)}
                         />
                       );
                     })}

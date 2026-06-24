@@ -4,6 +4,7 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { BetSlipProvider } from "./contexts/BetSlipContext";
 import Home from "./pages/Home";
 
 function Router() {
@@ -22,10 +23,13 @@ export default function App() {
       <ThemeProvider
         defaultTheme="dark"
         switchable
-      >  <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+      >
+        <BetSlipProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </BetSlipProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

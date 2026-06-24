@@ -8,6 +8,7 @@
  */
 import { useRef, useEffect } from 'react';
 import { TABS, type TabId } from '@/lib/tabs';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 
 // Logical groups — shown as subtle dividers
 const GROUPS: { ids: TabId[]; label: string }[] = [
@@ -23,6 +24,8 @@ interface TabBarProps {
 
 export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { legs } = useBetSlip();
+  const parlayCount = legs.length;
 
   useEffect(() => {
     const el = scrollRef.current?.querySelector(`[data-tab="${activeTab}"]`) as HTMLElement | null;
@@ -67,6 +70,11 @@ export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
                 )}
                 <span className="text-base leading-none">{tab.icon}</span>
                 <span className="text-xs font-semibold tracking-wide">{tab.label}</span>
+                {id === 'parlays' && parlayCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-indigo-500 text-white text-xs font-black flex items-center justify-center leading-none">
+                    {parlayCount > 9 ? '9+' : parlayCount}
+                  </span>
+                )}
               </button>
             );
           })}

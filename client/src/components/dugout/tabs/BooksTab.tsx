@@ -11,6 +11,7 @@
  *   - 3-key rotation manager
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useBetSlip } from '@/contexts/BetSlipContext';
 import { RefreshCw, TrendingUp, ChevronRight, ShoppingCart } from 'lucide-react';
 import type { useKeyManager } from '@/hooks/useKeyManager';
 import GameResearchDrawer, { type BetSlip } from '../GameResearchDrawer';
@@ -111,7 +112,7 @@ export default function BooksTab({ keyManager, onOpenKeyPanel }: Props) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [quota, setQuota] = useState<number | null>(null);
   const [openGame, setOpenGame] = useState<Game | null>(null);
-  const [betSlip, setBetSlip] = useState<BetSlip[]>([]);
+  const { legs, addLeg, removeLeg, clearLegs } = useBetSlip();
   const [showSlip, setShowSlip] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -148,17 +149,33 @@ export default function BooksTab({ keyManager, onOpenKeyPanel }: Props) {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [fetchOdds]);
 
+  // Adapt BooksTab BetSlip shape → global BetLeg
   function addBet(bet: BetSlip) {
-    setBetSlip(prev => {
-      const k = betKey(bet);
-      if (prev.some(b => betKey(b) === k)) return prev;
-      return [...prev, bet];
+    addLeg({
+      player: bet.matchup,
+      market: bet.market,
+      selection: bet.selection,
+      odds: bet.odds,
+      game: bet.matchup,
     });
   }
 
   function removeBet(k: string) {
-    setBetSlip(prev => prev.filter(b => betKey(b) !== k));
+    // k = "market:selection:book" — find matching leg
+    const [market, selection] = k.split(':');
+    const leg = legs.find(l => l.market === market && l.selection === selection);
+    if (leg) removeLeg(leg.id);
   }
+
+  // Build a BetSlip[] view from global legs for GameResearchDrawer
+  const betSlip: BetSlip[] = legs.map(l => ({
+    gameId: '',
+    matchup: l.game,
+    market: l.market,
+    selection: l.selection,
+    odds: l.odds,
+    book: 'FD',
+  }));
 
   const activeSlot = slots[activeIdx];
   const combined = combinedOdds(betSlip);

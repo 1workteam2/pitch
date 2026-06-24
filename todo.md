@@ -17,3 +17,11 @@
 - [x] PlayerDetailPanel: stat category switcher (Hits/HR/TB/RBI/SB for batters; K/HA/ER/Outs for pitchers)
 - [x] Same Game Parlay tabs on game view (Batting / Pitching / Specials)
 - [x] Wire player row tap in PlayerPropsTab to open PlayerDetailPanel
+
+## Round 6 — Parlays Tab
+
+- [x] Create global BetSlipContext with legs, addLeg, removeLeg, clearLegs, combined odds
+- [x] Wire PlayerPropsTab odds buttons to add legs to BetSlipContext
+- [x] Wire PlayerDetailPanel O/U + alt threshold buttons to add legs to BetSlipContext
+- [x] Build ParlaysTab: leg list with remove button, combined odds, payout calculator, FanDuel deep-link
+- [x] Show floating parlay badge count on Parlays tab when legs are pending
