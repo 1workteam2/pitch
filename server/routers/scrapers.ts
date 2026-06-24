@@ -14,11 +14,15 @@ import { publicProcedure, router } from '../_core/trpc';
 import { scrapeLineups, getLineupsCache } from '../scrapers/lineups';
 import { fetchPitcherSplits, fetchMultiplePitcherSplits } from '../scrapers/pitcherSplits';
 import { scrapeWeather, getWeatherCache } from '../scrapers/weather';
+import { notifyOwner } from '../_core/notification';
 
 // ── Scheduled refresh ────────────────────────────────────────────────────────
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 let lastRefresh: Date | null = null;
 let isRefreshing = false;
+
+// Track which games have already sent a lineup-confirmed notification
+const notifiedLineupGames = new Set<number>();
 
 async function runFullRefresh(force = false) {
   if (isRefreshing) return;
@@ -27,8 +31,42 @@ async function runFullRefresh(force = false) {
 
   try {
     // 1. Lineups first (gives us game times and pitcher IDs)
+    const prevCache: import('../scrapers/lineups').GameLineup[] = getLineupsCache() ?? [];
+    const prevConfirmedSet = new Set(prevCache.filter(g => g.lineupConfirmed).map(g => g.gamePk));
+
     const lineups = await scrapeLineups(force);
     console.log(`[scrapers] Lineups: ${lineups.length} games loaded`);
+
+    // Notify owner for any newly confirmed lineups
+    for (const game of lineups) {
+      if (
+        game.lineupConfirmed &&
+        !prevConfirmedSet.has(game.gamePk) &&
+        !notifiedLineupGames.has(game.gamePk)
+      ) {
+        notifiedLineupGames.add(game.gamePk);
+        const awayPitcher = game.awayProbablePitcher?.name ?? 'TBD';
+        const homePitcher = game.homeProbablePitcher?.name ?? 'TBD';
+        const gameTimeLocal = new Date(game.gameTime).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          timeZoneName: 'short',
+        });
+        notifyOwner({
+          title: `⚾ Lineups Confirmed — ${game.awayTeam.abbrev} @ ${game.homeTeam.abbrev}`,
+          content: [
+            `Game: ${game.awayTeam.name} @ ${game.homeTeam.name}`,
+            `Time: ${gameTimeLocal}`,
+            `Venue: ${game.venue}`,
+            `Away SP: ${awayPitcher}`,
+            `Home SP: ${homePitcher}`,
+            ``,
+            `✅ Lineups are confirmed — safe to lock YRFI, First Five, and player props.`,
+          ].join('\n'),
+        }).catch(err => console.warn('[scrapers] Lineup notification failed:', err));
+        console.log(`[scrapers] Sent lineup-confirmed notification for game ${game.gamePk}: ${game.awayTeam.abbrev} @ ${game.homeTeam.abbrev}`);
+      }
+    }
 
     // 2. Pitcher splits for all probable pitchers
     const pitchers: Array<{ playerId: number; teamAbbrev: string }> = [];

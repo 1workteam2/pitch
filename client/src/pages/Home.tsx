@@ -8,10 +8,7 @@ import BooksTab from '@/components/dugout/tabs/BooksTab';
 import LiveTab from '@/components/dugout/tabs/LiveTab';
 import RfiTab from '@/components/dugout/tabs/RfiTab';
 import LinesTab from '@/components/dugout/tabs/LinesTab';
-import HitsTab from '@/components/dugout/tabs/HitsTab';
-import BasesTab from '@/components/dugout/tabs/BasesTab';
-import HrTab from '@/components/dugout/tabs/HrTab';
-import KsTab from '@/components/dugout/tabs/KsTab';
+import PlayerPropsTab from '@/components/dugout/tabs/PlayerPropsTab';
 import ParlaysTab from '@/components/dugout/tabs/ParlaysTab';
 import LadderTab from '@/components/dugout/tabs/LadderTab';
 import CommunityTab from '@/components/dugout/tabs/CommunityTab';
@@ -37,6 +34,13 @@ export default function Home() {
     setLocation(`/?tab=${id}`, { replace: true });
   }, [setLocation]);
 
+  // Props tabs use the FanDuel-style PlayerPropsTab with different default markets
+  const isPropsTab = ['hits', 'bases', 'hr', 'ks'].includes(activeTab);
+  const propsMarket = activeTab === 'hr' ? 'hr'
+    : activeTab === 'ks' ? 'ks'
+    : activeTab === 'bases' ? 'total_bases'
+    : 'hits';
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header
@@ -57,10 +61,13 @@ export default function Home() {
             onOpenKeyPanel={() => setKeyPanelOpen(true)}
           />
         )}
-        {activeTab === 'hits'      && <HitsTab />}
-        {activeTab === 'bases'     && <BasesTab />}
-        {activeTab === 'hr'        && <HrTab />}
-        {activeTab === 'ks'        && <KsTab />}
+        {/* Props tabs — Hits, Bases, HR, Ks all use the FanDuel-style layout */}
+        {isPropsTab && (
+          <PlayerPropsTab
+            key={activeTab}
+            defaultMarket={propsMarket as any}
+          />
+        )}
         {activeTab === 'parlays'   && <ParlaysTab />}
         {activeTab === 'ladder'    && <LadderTab />}
         {activeTab === 'community' && <CommunityTab />}

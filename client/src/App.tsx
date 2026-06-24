@@ -19,8 +19,10 @@ function Router() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
+      <ThemeProvider
+        defaultTheme="dark"
+        switchable
+      >  <TooltipProvider>
           <Toaster />
           <Router />
         </TooltipProvider>

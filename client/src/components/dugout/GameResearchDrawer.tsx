@@ -1,14 +1,16 @@
 /**
  * GameResearchDrawer
  * Deep-dive panel for a single MLB game.
- * Tabs: Game Lines | Pitcher Props | Batter Props | Inning Splits | Bet Builder
+ * Tabs: Game Lines | Pitcher Props | Batter Props | Inning Splits | Lineup | Bet Builder
  *
  * Data sources:
  *   - The Odds API /events/{id}/odds  → FanDuel player props
  *   - MLB Stats API statsapi.mlb.com  → pitcher stats, inning splits (free, no key)
+ *   - Server scrapers (tRPC)          → confirmed lineups, weather, pitcher splits
  */
 import { useState, useEffect, useCallback } from 'react';
-import { X, TrendingUp, Plus, Minus, ExternalLink, RefreshCw } from 'lucide-react';
+import { X, TrendingUp, Plus, Minus, ExternalLink, RefreshCw, Cloud, Wind, Thermometer, Users } from 'lucide-react';
+import { useLineups, useWeather } from '@/hooks/useScraperData';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -110,7 +112,6 @@ const MLB_API = 'https://statsapi.mlb.com/api/v1';
 
 async function fetchPitcherStats(homeTeam: string, awayTeam: string): Promise<PitcherStat[]> {
   try {
-    // Get today's schedule to find the game and probable pitchers
     const today = new Date().toISOString().split('T')[0];
     const schedRes = await fetch(
       `${MLB_API}/schedule?sportId=1&date=${today}&hydrate=probablePitcher(note),team`
@@ -123,7 +124,6 @@ async function fetchPitcherStats(homeTeam: string, awayTeam: string): Promise<Pi
       }
     }
 
-    // Find matching game
     const match = games.find(g => {
       const h = g.teams.home.team.name.toLowerCase();
       const a = g.teams.away.team.name.toLowerCase();
@@ -141,14 +141,12 @@ async function fetchPitcherStats(homeTeam: string, awayTeam: string): Promise<Pi
       if (!pitcher) continue;
       const teamName = match.teams[side].team.name;
 
-      // Fetch season stats
       const statsRes = await fetch(
         `${MLB_API}/people/${pitcher.id}/stats?stats=season&group=pitching&season=${new Date().getFullYear()}&sportId=1`
       );
       const statsData = await statsRes.json();
       const s = statsData.stats?.[0]?.splits?.[0]?.stat ?? {};
 
-      // Fetch game log (last 5 starts)
       const logRes = await fetch(
         `${MLB_API}/people/${pitcher.id}/stats?stats=gameLog&group=pitching&season=${new Date().getFullYear()}&sportId=1`
       );
@@ -161,7 +159,6 @@ async function fetchPitcherStats(homeTeam: string, awayTeam: string): Promise<Pi
         k: split.stat?.strikeOuts ?? 0,
       }));
 
-      // Build inning log from game log (approximate: distribute ER across innings)
       const inningLog = Array.from({ length: 9 }, (_, i) => ({
         inning: i + 1,
         runs: 0,
@@ -280,7 +277,6 @@ function PitcherCard({ p }: { p: PitcherStat }) {
         </div>
       </div>
 
-      {/* Stat grid */}
       <div className="grid grid-cols-4 gap-2 mb-3">
         {[
           { label: 'WHIP', val: p.whip },
@@ -295,7 +291,6 @@ function PitcherCard({ p }: { p: PitcherStat }) {
         ))}
       </div>
 
-      {/* Last 5 starts */}
       {p.last5.length > 0 && (
         <div>
           <div className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Last 5 Starts</div>
@@ -318,9 +313,169 @@ function PitcherCard({ p }: { p: PitcherStat }) {
   );
 }
 
+// ─── Weather panel ────────────────────────────────────────────────────────────
+
+function WeatherPanel({ venueName }: { venueName: string }) {
+  const { weather } = useWeather();
+
+  const weatherByVenue = Object.fromEntries(
+    weather.map(w => [w.venueName.toLowerCase(), w])
+  );
+
+  const key = venueName.toLowerCase();
+  let wx = weatherByVenue[key];
+  if (!wx) {
+    const matchKey = Object.keys(weatherByVenue).find(k => k.includes(key) || key.includes(k));
+    if (matchKey) wx = weatherByVenue[matchKey];
+  }
+
+  if (!wx) return null;
+
+  const impactColor = wx.betImpact === 'favorable' ? 'text-green-400' : wx.betImpact === 'unfavorable' ? 'text-red-400' : 'text-muted-foreground';
+
+  return (
+    <div className="dg-card mb-3 border-blue-500/20">
+      <div className="flex items-center gap-2 mb-2">
+        <Cloud size={13} className="text-blue-400" />
+        <span className="text-xs font-semibold text-foreground">{wx.venueName}</span>
+        {wx.isIndoor && (
+          <span className="text-xs bg-secondary px-1.5 py-0.5 rounded text-muted-foreground">Indoor</span>
+        )}
+        {!wx.isIndoor && (
+          <span className={`text-xs font-semibold ${impactColor}`}>{wx.betImpact}</span>
+        )}
+      </div>
+
+      {!wx.isIndoor && (
+        <>
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            <div className="text-center bg-secondary/50 rounded p-1.5">
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <Thermometer size={10} className="text-orange-400" />
+                <span className="text-xs font-mono font-bold text-foreground">{wx.tempF ?? '--'}°F</span>
+              </div>
+              <div className="text-xs text-muted-foreground">Temp</div>
+            </div>
+            <div className="text-center bg-secondary/50 rounded p-1.5">
+              <div className="flex items-center justify-center gap-1 mb-0.5">
+                <Wind size={10} className="text-blue-400" />
+                <span className="text-xs font-mono font-bold text-foreground">{wx.windSpeedMph ?? 0} mph</span>
+              </div>
+              <div className="text-xs text-muted-foreground">{wx.windDirection}</div>
+            </div>
+            <div className="text-center bg-secondary/50 rounded p-1.5">
+              <div className="text-xs font-mono font-bold text-foreground">{wx.precipPct ?? 0}%</div>
+              <div className="text-xs text-muted-foreground">Precip</div>
+            </div>
+          </div>
+
+          {wx.betNote && (
+            <div className={`text-xs px-2 py-1.5 rounded bg-secondary/30 ${impactColor}`}>
+              {wx.betNote}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Lineup panel ─────────────────────────────────────────────────────────────
+
+function LineupPanel({ homeTeam, awayTeam }: { homeTeam: string; awayTeam: string }) {
+  const { lineups } = useLineups();
+
+  const game = lineups.find(g => {
+    const h = (typeof g.homeTeam === 'string' ? g.homeTeam : (g.homeTeam as { name: string }).name).toLowerCase();
+    const a = (typeof g.awayTeam === 'string' ? g.awayTeam : (g.awayTeam as { name: string }).name).toLowerCase();
+    return (
+      homeTeam.toLowerCase().split(' ').some(w => h.includes(w)) &&
+      awayTeam.toLowerCase().split(' ').some(w => a.includes(w))
+    );
+  });
+
+  if (!game) {
+    return (
+      <div className="text-xs text-muted-foreground py-4 text-center">
+        Lineups not yet posted. Check back closer to game time.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Status badge */}
+      <div className="flex items-center gap-2">
+        <span className={`text-xs px-2 py-0.5 rounded font-semibold ${game.lineupConfirmed ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-400'}`}>
+          {game.lineupConfirmed ? '✓ Lineup Confirmed' : '⏳ Probable — Not Official'}
+        </span>
+        <span className="text-xs text-muted-foreground font-mono">{game.venue}</span>
+      </div>
+
+      {/* Probable pitchers */}
+      {(game.homeProbablePitcher || game.awayProbablePitcher) && (
+        <div className="dg-card">
+          <div className="section-label mb-2">Probable Pitchers</div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { side: 'Away', pitcher: game.awayProbablePitcher, team: (game.awayTeam as { name: string }).name },
+              { side: 'Home', pitcher: game.homeProbablePitcher, team: (game.homeTeam as { name: string }).name },
+            ].map(({ side, pitcher, team }) => (
+              <div key={side}>
+                <div className="text-xs text-muted-foreground mb-1">{side} · {team}</div>
+                {pitcher ? (
+                  <div>
+                    <div className="text-xs font-semibold text-foreground">{pitcher.name}</div>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {pitcher.wins ?? 0}W–{pitcher.losses ?? 0}L · {pitcher.era ?? '—'} ERA
+                    </div>
+
+                  </div>
+                ) : (
+                  <div className="text-xs text-muted-foreground">TBD</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Batting orders */}
+      {(game.homeLineup.length > 0 || game.awayLineup.length > 0) && (
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { side: 'Away', lineup: game.awayLineup, team: (game.awayTeam as { name: string }).name },
+            { side: 'Home', lineup: game.homeLineup, team: (game.homeTeam as { name: string }).name },
+          ].map(({ side, lineup, team }) => (
+            <div key={side} className="dg-card">
+              <div className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                <Users size={11} className="text-primary" />
+                {side} · {team}
+              </div>
+              {lineup.length > 0 ? (
+                <div className="space-y-0.5">
+                  {lineup.map((batter, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground font-mono w-3">{i + 1}</span>
+                      <span className="text-foreground flex-1 truncate">{batter.name}</span>
+                      <span className="text-muted-foreground text-xs">{batter.position}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground">Not yet posted</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
-type Tab = 'lines' | 'pitcher-props' | 'batter-props' | 'inning-splits' | 'bet-builder';
+type Tab = 'lines' | 'pitcher-props' | 'batter-props' | 'inning-splits' | 'lineup' | 'bet-builder';
 
 const PROP_MARKET_LABELS: Record<string, string> = {
   pitcher_strikeouts: 'Pitcher Strikeouts',
@@ -333,6 +488,8 @@ const PROP_MARKET_LABELS: Record<string, string> = {
   batter_total_bases: 'Total Bases',
   batter_stolen_bases: 'Stolen Bases',
   first_half_result: 'NRFI / YRFI',
+  first_five_innings_winner: 'First 5 Innings',
+  first_five_innings_totals: 'First 5 Total',
 };
 
 const PITCHER_PROP_KEYS = ['pitcher_strikeouts', 'pitcher_hits_allowed', 'pitcher_earned_runs', 'pitcher_outs'];
@@ -357,12 +514,25 @@ export default function GameResearchDrawer({
   const [stake, setStake] = useState(25);
   const matchup = `${awayTeam} @ ${homeTeam}`;
 
+  // Get venue name from lineups for weather matching
+  const { lineups } = useLineups();
+  const gameLineup = lineups.find(g => {
+    const h = (typeof g.homeTeam === 'string' ? g.homeTeam : (g.homeTeam as { name: string }).name).toLowerCase();
+    const a = (typeof g.awayTeam === 'string' ? g.awayTeam : (g.awayTeam as { name: string }).name).toLowerCase();
+    return (
+      homeTeam.toLowerCase().split(' ').some(w => h.includes(w)) &&
+      awayTeam.toLowerCase().split(' ').some(w => a.includes(w))
+    );
+  });
+  const venueName = gameLineup?.venue ?? homeTeam;
+
   const fetchEventOdds = useCallback(async () => {
     if (!apiKey) return;
     setLoadingOdds(true);
     try {
       const propMarkets = [
         'h2h', 'spreads', 'totals', 'first_half_result',
+        'first_five_innings_winner', 'first_five_innings_totals',
         ...PITCHER_PROP_KEYS, ...BATTER_PROP_KEYS,
       ].join(',');
       const url = `https://api.the-odds-api.com/v4/sports/baseball_mlb/events/${gameId}/odds?apiKey=${apiKey}&regions=us&markets=${propMarkets}&bookmakers=fanduel&oddsFormat=american`;
@@ -390,7 +560,6 @@ export default function GameResearchDrawer({
     fetchStats();
   }, [fetchEventOdds, fetchStats]);
 
-  // Extract FanDuel markets from event odds
   const fdBook = eventOdds?.bookmakers.find(b => b.key === 'fanduel');
   const fdMarkets = fdBook?.markets ?? [];
 
@@ -398,7 +567,6 @@ export default function GameResearchDrawer({
     return fdMarkets.find(m => m.key === key);
   }
 
-  // Group player props by player name
   function getPlayerProps(marketKeys: string[]) {
     const players: Record<string, Record<string, { over?: Outcome; under?: Outcome }>> = {};
     for (const key of marketKeys) {
@@ -418,11 +586,12 @@ export default function GameResearchDrawer({
   const pitcherPlayers = getPlayerProps(PITCHER_PROP_KEYS);
   const batterPlayers = getPlayerProps(BATTER_PROP_KEYS);
 
-  // NRFI/YRFI market
   const nrfiMkt = getMarket('first_half_result');
   const nrfiOutcomes = nrfiMkt?.outcomes ?? [];
 
-  // Game lines
+  const ff5WinnerMkt = getMarket('first_five_innings_winner');
+  const ff5TotalsMkt = getMarket('first_five_innings_totals');
+
   const h2hMkt = getMarket('h2h');
   const spreadsMkt = getMarket('spreads');
   const totalsMkt = getMarket('totals');
@@ -435,6 +604,7 @@ export default function GameResearchDrawer({
     { id: 'pitcher-props', label: 'Pitcher Props' },
     { id: 'batter-props', label: 'Batter Props' },
     { id: 'inning-splits', label: 'Inning Splits' },
+    { id: 'lineup', label: `Lineup${gameLineup?.lineupConfirmed ? ' ✓' : ''}` },
     { id: 'bet-builder', label: `Bet Builder${gameBets.length > 0 ? ` (${gameBets.length})` : ''}` },
   ];
 
@@ -446,6 +616,9 @@ export default function GameResearchDrawer({
           <div className="text-sm font-bold text-foreground">{matchup}</div>
           <div className="text-xs text-muted-foreground font-mono">
             {new Date(commenceTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} ET
+            {venueName && venueName !== homeTeam && (
+              <span className="ml-2 text-muted-foreground/60">· {venueName}</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -486,22 +659,64 @@ export default function GameResearchDrawer({
           <div className="space-y-4">
             {loadingOdds && <div className="text-xs text-muted-foreground">Loading FanDuel lines…</div>}
 
+            {/* Weather banner */}
+            <WeatherPanel venueName={venueName} />
+
             {/* NRFI / YRFI */}
             {nrfiOutcomes.length > 0 && (
               <div>
-                <div className="section-label">NRFI / YRFI</div>
+                <div className="section-label">NRFI / YRFI · FanDuel</div>
                 <div className="space-y-1">
                   {nrfiOutcomes.map(o => {
-                    const bet: BetSlip = { gameId, matchup, market: 'first_half_result', selection: o.name, odds: o.price, book: 'FanDuel' };
+                    const label = o.name === 'No' ? 'NRFI (No Run 1st Inning)' : o.name === 'Yes' ? 'YRFI (Run in 1st Inning)' : o.name;
+                    const bet: BetSlip = { gameId, matchup, market: 'first_half_result', selection: label, odds: o.price, book: 'FanDuel' };
                     const k = betKey(bet);
                     const active = betSlip.some(b => betKey(b) === k);
                     return (
                       <div key={o.name} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
-                        <span className="text-xs font-medium text-foreground">{o.name}</span>
+                        <div>
+                          <span className="text-xs font-medium text-foreground">{label}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">{Math.round(impliedProb(o.price) * 100)}%</span>
+                        </div>
                         <button
                           onClick={() => active ? onRemoveBet(k) : onAddBet(bet)}
                           className={`prop-btn ${active ? 'active' : ''}`}
                         >
+                          {fmtOdds(o.price)}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* First 5 Innings */}
+            {(ff5WinnerMkt || ff5TotalsMkt) && (
+              <div>
+                <div className="section-label">First 5 Innings · FanDuel</div>
+                <div className="space-y-1">
+                  {ff5WinnerMkt?.outcomes.map(o => {
+                    const bet: BetSlip = { gameId, matchup, market: 'first_five_innings_winner', selection: `F5 ${o.name}`, odds: o.price, book: 'FanDuel' };
+                    const k = betKey(bet);
+                    const active = betSlip.some(b => betKey(b) === k);
+                    return (
+                      <div key={o.name} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
+                        <span className="text-xs font-medium text-foreground">F5 ML — {o.name}</span>
+                        <button onClick={() => active ? onRemoveBet(k) : onAddBet(bet)} className={`prop-btn ${active ? 'active' : ''}`}>
+                          {fmtOdds(o.price)}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {ff5TotalsMkt?.outcomes.map(o => {
+                    const bet: BetSlip = { gameId, matchup, market: 'first_five_innings_totals', selection: `F5 ${o.name} ${o.point}`, odds: o.price, book: 'FanDuel' };
+                    const k = betKey(bet);
+                    const active = betSlip.some(b => betKey(b) === k);
+                    return (
+                      <div key={`${o.name}-${o.point}`} className="flex items-center justify-between py-1.5 border-b border-border/40 last:border-0">
+                        <span className="text-xs font-medium text-foreground">F5 {o.name} {o.point}</span>
+                        <button onClick={() => active ? onRemoveBet(k) : onAddBet(bet)} className={`prop-btn ${active ? 'active' : ''}`}>
                           {fmtOdds(o.price)}
                         </button>
                       </div>
@@ -593,7 +808,7 @@ export default function GameResearchDrawer({
               </div>
             )}
 
-            {!loadingOdds && !h2hMkt && !spreadsMkt && !totalsMkt && !nrfiMkt && (
+            {!loadingOdds && !h2hMkt && !spreadsMkt && !totalsMkt && !nrfiMkt && !ff5WinnerMkt && (
               <div className="text-xs text-muted-foreground py-4 text-center">No FanDuel lines available for this game yet.</div>
             )}
           </div>
@@ -660,6 +875,9 @@ export default function GameResearchDrawer({
         {/* ── INNING SPLITS ── */}
         {tab === 'inning-splits' && (
           <div>
+            {/* Weather at top of inning splits */}
+            <WeatherPanel venueName={venueName} />
+
             {loadingStats && <div className="text-xs text-muted-foreground mb-3">Loading pitcher stats…</div>}
             {pitcherStats.length === 0 && !loadingStats && (
               <div className="text-xs text-muted-foreground py-4 text-center">
@@ -670,43 +888,59 @@ export default function GameResearchDrawer({
               <PitcherCard key={p.name} p={p} />
             ))}
 
-            {/* Inning breakdown table */}
             {pitcherStats.length > 0 && (
               <div className="dg-card">
-                <div className="section-label mb-2">Inning-by-Inning Context</div>
+                <div className="section-label mb-2">Inning-by-Inning Bet Context</div>
                 <div className="text-xs text-muted-foreground mb-3">
-                  Innings tell a story. First inning (NRFI/YRFI), middle innings (run-scoring), late innings (bullpen exposure).
+                  Innings tell a story — first inning (NRFI/YRFI), first five (F5 ML/total), late innings (bullpen exposure).
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-border">
-                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Inning</th>
-                        <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">1st</th>
+                        <th className="text-left py-1.5 pr-3 text-muted-foreground font-medium">Focus</th>
+                        <th className="text-center py-1.5 px-2 text-amber-400 font-semibold">1st</th>
                         <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">2nd</th>
                         <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">3rd</th>
                         <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">4th</th>
-                        <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">5th</th>
+                        <th className="text-center py-1.5 px-2 text-blue-400 font-semibold">5th</th>
                         <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">6th</th>
-                        <th className="text-center py-1.5 px-2 text-muted-foreground font-medium">7th+</th>
+                        <th className="text-center py-1.5 px-2 text-red-400 font-semibold">7th+</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <td className="py-1.5 pr-3 text-muted-foreground">Bet Focus</td>
-                        <td className="text-center px-2 text-amber-400 font-semibold">NRFI</td>
+                        <td className="py-1.5 pr-3 text-muted-foreground font-medium">Bet</td>
+                        <td className="text-center px-2 text-amber-400 font-semibold">NRFI/YRFI</td>
                         <td className="text-center px-2 text-muted-foreground">Setup</td>
                         <td className="text-center px-2 text-muted-foreground">Setup</td>
                         <td className="text-center px-2 text-blue-400">Props</td>
-                        <td className="text-center px-2 text-blue-400">Props</td>
+                        <td className="text-center px-2 text-blue-400 font-semibold">F5 Lock</td>
                         <td className="text-center px-2 text-muted-foreground">Limit</td>
-                        <td className="text-center px-2 text-red-400">Bullpen</td>
+                        <td className="text-center px-2 text-red-400 font-semibold">Bullpen</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 pr-3 text-muted-foreground font-medium">Market</td>
+                        <td className="text-center px-2 text-amber-400 text-xs">1st Half</td>
+                        <td className="text-center px-2 text-muted-foreground text-xs">—</td>
+                        <td className="text-center px-2 text-muted-foreground text-xs">—</td>
+                        <td className="text-center px-2 text-blue-400 text-xs">K/Hits</td>
+                        <td className="text-center px-2 text-blue-400 text-xs">F5 ML</td>
+                        <td className="text-center px-2 text-muted-foreground text-xs">—</td>
+                        <td className="text-center px-2 text-red-400 text-xs">Total</td>
                       </tr>
                     </tbody>
                   </table>
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── LINEUP ── */}
+        {tab === 'lineup' && (
+          <div>
+            <LineupPanel homeTeam={homeTeam} awayTeam={awayTeam} />
           </div>
         )}
 
@@ -756,7 +990,6 @@ export default function GameResearchDrawer({
                   </div>
                 </div>
 
-                {/* Stake selector */}
                 <div className="flex items-center gap-2 mb-3">
                   <span className="text-xs text-muted-foreground">Stake:</span>
                   {[10, 25, 50, 100].map(s => (
