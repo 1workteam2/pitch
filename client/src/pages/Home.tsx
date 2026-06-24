@@ -16,6 +16,7 @@ import ParlaysTab from '@/components/dugout/tabs/ParlaysTab';
 import LadderTab from '@/components/dugout/tabs/LadderTab';
 import CommunityTab from '@/components/dugout/tabs/CommunityTab';
 import LibraryTab from '@/components/dugout/tabs/LibraryTab';
+import LineupsTab from '@/components/dugout/tabs/LineupsTab';
 import KeyManagerPanel from '@/components/dugout/KeyManagerPanel';
 
 function getInitialTab(): TabId {
@@ -49,6 +50,7 @@ export default function Home() {
         {activeTab === 'live'      && <LiveTab />}
         {activeTab === 'rfi'       && <RfiTab />}
         {activeTab === 'lines'     && <LinesTab />}
+        {activeTab === 'lineups'   && <LineupsTab />}
         {activeTab === 'books'     && (
           <BooksTab
             keyManager={keyManager}

@@ -1,5 +1,20 @@
+/**
+ * TabBar — compact grouped navigation
+ *
+ * Design: Two logical groups in a single scrollable row.
+ * Each tab is an icon pill — no label text until active.
+ * Active tab shows icon + short label inline.
+ * Keeps the bar to ~36px tall so content starts immediately.
+ */
 import { useRef, useEffect } from 'react';
 import { TABS, type TabId } from '@/lib/tabs';
+
+// Logical groups — shown as subtle dividers
+const GROUPS: { ids: TabId[]; label: string }[] = [
+  { label: 'Game',  ids: ['live', 'rfi', 'lines', 'books'] },
+  { label: 'Props', ids: ['hits', 'bases', 'hr', 'ks'] },
+  { label: 'Tools', ids: ['parlays', 'ladder', 'community', 'library'] },
+];
 
 interface TabBarProps {
   activeTab: TabId;
@@ -9,7 +24,6 @@ interface TabBarProps {
 export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Scroll active tab into view on mount / change
   useEffect(() => {
     const el = scrollRef.current?.querySelector(`[data-tab="${activeTab}"]`) as HTMLElement | null;
     el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
@@ -18,20 +32,39 @@ export default function TabBar({ activeTab, onTabChange }: TabBarProps) {
   return (
     <nav
       ref={scrollRef}
-      className="flex items-center gap-1 px-3 py-1.5 border-b border-border overflow-x-auto scrollbar-none bg-card/40"
-      style={{ scrollbarWidth: 'none' }}
+      className="flex items-center gap-0.5 px-2 border-b border-border bg-card/50 backdrop-blur-sm overflow-x-auto"
+      style={{ scrollbarWidth: 'none', height: '38px', flexShrink: 0 }}
     >
-      {TABS.map(tab => (
-        <button
-          key={tab.id}
-          data-tab={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={`dg-tab ${activeTab === tab.id ? 'active' : ''}`}
-          style={activeTab === tab.id ? { color: tab.accentColor } : undefined}
-        >
-          <span>{tab.icon}</span>
-          <span>{tab.label}</span>
-        </button>
+      {GROUPS.map((group, gi) => (
+        <div key={group.label} className="flex items-center gap-0.5">
+          {/* Group divider (not before first group) */}
+          {gi > 0 && (
+            <div className="w-px h-4 bg-border mx-1 shrink-0" />
+          )}
+          {group.ids.map(id => {
+            const tab = TABS.find(t => t.id === id)!;
+            const isActive = activeTab === id;
+            return (
+              <button
+                key={id}
+                data-tab={id}
+                onClick={() => onTabChange(id)}
+                title={tab.label}
+                className={`compact-tab ${isActive ? 'active' : ''}`}
+                style={isActive ? {
+                  color: tab.accentColor,
+                  background: `${tab.accentColor}18`,
+                  borderColor: `${tab.accentColor}35`,
+                } : undefined}
+              >
+                <span className="compact-tab-icon">{tab.icon}</span>
+                {isActive && (
+                  <span className="compact-tab-label">{tab.label}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       ))}
     </nav>
   );

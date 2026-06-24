@@ -3,6 +3,7 @@ export type TabId =
   | 'rfi'
   | 'lines'
   | 'books'
+  | 'lineups'
   | 'hits'
   | 'bases'
   | 'hr'
@@ -25,6 +26,7 @@ export const TABS: TabDef[] = [
   { id: 'rfi',       label: 'Y/N-RFI',  icon: '½',  color: 'text-yellow-400', accentColor: '#facc15' },
   { id: 'lines',     label: 'Lines',     icon: '≡',  color: 'text-blue-400',   accentColor: '#60a5fa' },
   { id: 'books',     label: 'Books',     icon: '📖', color: 'text-indigo-400', accentColor: '#818cf8' },
+  { id: 'lineups',   label: 'Lineups',   icon: '📋', color: 'text-cyan-400',   accentColor: '#22d3ee' },
   { id: 'hits',      label: 'Hits',      icon: 'H',  color: 'text-green-400',  accentColor: '#4ade80' },
   { id: 'bases',     label: 'Bases',     icon: 'B',  color: 'text-purple-400', accentColor: '#c084fc' },
   { id: 'hr',        label: 'HR',        icon: '💣', color: 'text-red-400',    accentColor: '#f87171' },
