@@ -1,25 +1,80 @@
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { useState, useCallback } from 'react';
+import { useLocation } from 'wouter';
+import { TABS, type TabId } from '@/lib/tabs';
+import { useKeyManager } from '@/hooks/useKeyManager';
+import Header from '@/components/dugout/Header';
+import TabBar from '@/components/dugout/TabBar';
+import BooksTab from '@/components/dugout/tabs/BooksTab';
+import LiveTab from '@/components/dugout/tabs/LiveTab';
+import RfiTab from '@/components/dugout/tabs/RfiTab';
+import LinesTab from '@/components/dugout/tabs/LinesTab';
+import HitsTab from '@/components/dugout/tabs/HitsTab';
+import BasesTab from '@/components/dugout/tabs/BasesTab';
+import HrTab from '@/components/dugout/tabs/HrTab';
+import KsTab from '@/components/dugout/tabs/KsTab';
+import ParlaysTab from '@/components/dugout/tabs/ParlaysTab';
+import LadderTab from '@/components/dugout/tabs/LadderTab';
+import CommunityTab from '@/components/dugout/tabs/CommunityTab';
+import LibraryTab from '@/components/dugout/tabs/LibraryTab';
+import KeyManagerPanel from '@/components/dugout/KeyManagerPanel';
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Best Practices, Design Guide and Common Pitfalls
- */
+function getInitialTab(): TabId {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get('tab') as TabId | null;
+  if (tab && TABS.find(t => t.id === tab)) return tab;
+  return 'live';
+}
+
 export default function Home() {
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  const [activeTab, setActiveTab] = useState<TabId>(getInitialTab);
+  const [keyPanelOpen, setKeyPanelOpen] = useState(false);
+  const [, setLocation] = useLocation();
+  const keyManager = useKeyManager();
+
+  const handleTabChange = useCallback((id: TabId) => {
+    setActiveTab(id);
+    setLocation(`/?tab=${id}`, { replace: true });
+  }, [setLocation]);
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
+    <div className="min-h-screen bg-background flex flex-col">
+      <Header
+        onKeyClick={() => setKeyPanelOpen(true)}
+        activeKey={keyManager.activeKey}
+      />
+
+      <TabBar activeTab={activeTab} onTabChange={handleTabChange} />
+
+      <main className="flex-1 overflow-auto">
+        {activeTab === 'live'      && <LiveTab />}
+        {activeTab === 'rfi'       && <RfiTab />}
+        {activeTab === 'lines'     && <LinesTab />}
+        {activeTab === 'books'     && (
+          <BooksTab
+            keyManager={keyManager}
+            onOpenKeyPanel={() => setKeyPanelOpen(true)}
+          />
+        )}
+        {activeTab === 'hits'      && <HitsTab />}
+        {activeTab === 'bases'     && <BasesTab />}
+        {activeTab === 'hr'        && <HrTab />}
+        {activeTab === 'ks'        && <KsTab />}
+        {activeTab === 'parlays'   && <ParlaysTab />}
+        {activeTab === 'ladder'    && <LadderTab />}
+        {activeTab === 'community' && <CommunityTab />}
+        {activeTab === 'library'   && <LibraryTab />}
       </main>
+
+      {keyPanelOpen && (
+        <KeyManagerPanel
+          keyManager={keyManager}
+          onClose={() => setKeyPanelOpen(false)}
+        />
+      )}
+
+      <footer className="border-t border-border py-2 px-4 text-center text-xs text-muted-foreground">
+        BenchSeats · The Dugout Beta
+      </footer>
     </div>
   );
 }
