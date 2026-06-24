@@ -63,10 +63,7 @@ export default function Home() {
         )}
         {/* Props tabs — Hits, Bases, HR, Ks all use the FanDuel-style layout */}
         {isPropsTab && (
-          <PlayerPropsTab
-            key={activeTab}
-            defaultMarket={propsMarket as any}
-          />
+          <PlayerPropsTab key={activeTab} />
         )}
         {activeTab === 'parlays'   && <ParlaysTab />}
         {activeTab === 'ladder'    && <LadderTab />}

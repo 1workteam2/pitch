@@ -25,3 +25,11 @@
 - [x] Wire PlayerDetailPanel O/U + alt threshold buttons to add legs to BetSlipContext
 - [x] Build ParlaysTab: leg list with remove button, combined odds, payout calculator, FanDuel deep-link
 - [x] Show floating parlay badge count on Parlays tab when legs are pending
+
+## Round 7 — FanDuel SGP Layout Rebuild
+
+- [x] Rebuild PlayerPropsTab: game selector header (team logos + date + time)
+- [x] Collapsible market sections with SGP badge (Player Hits, Player Home Runs, Total Strikeouts O/U, 1st Inning O/U)
+- [x] Real MLB headshots + player name + Last 5 AVG in each row
+- [x] Threshold columns (1+, 2+, 3+, 4+) with blue outlined odds buttons matching FanDuel style
+- [x] Sticky betslip bar at bottom: leg count badge + "$10 N-leg parlay wins $X.XX" + expand chevron
